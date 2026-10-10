@@ -1,20 +1,16 @@
 import json
 import os
-import vertexai
-from vertexai.generative_models import GenerativeModel, Part
+import google.generativeai as genai
 
-# 1. Use us-central1 (highest default quota)
-PROJECT_ID = "project-phoenix-ai-511013"
-LOCATION = "us-central1"
-
+# Keep this so your Firestore database doesn't break!
 if "GOOGLE_APPLICATION_CREDENTIALS" not in os.environ:
     os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = "gcp-credentials.json"
 
-# Initialize Vertex AI
-vertexai.init(project=PROJECT_ID, location=LOCATION)
+# Bypass Vertex AI and use the instant Developer API
+genai.configure(api_key="AQ.Ab8RN6JRs5qa1m4QgxJSpVSdWn-lAde5jjpHES2KevAeW4UElQ")
 
-# 2. Use the stable, globally available Flash model 
-model = GenerativeModel("gemini-1.0-pro-vision-001")
+# Explicitly use the newest model as required by the API
+model = genai.GenerativeModel("gemini-3.8-flash")
 
 def inspect_defect(image_bytes: bytes, product_name: str, retail_price: float) -> dict:
     prompt = f"""
@@ -25,27 +21,29 @@ def inspect_defect(image_bytes: bytes, product_name: str, retail_price: float) -
 
     Return your output strictly as valid JSON with no markdown backticks or commentary, adhering to this structure:
     {{
-        "defect_type": "string (e.g., zipper_slider_off_track, torn_seam, sole_separation, cosmetic_stain)",
+        "defect_type": "string (e.g., zipper_slider_off_track, torn_seam, sole_separation)",
         "severity": "minor" | "moderate" | "severe",
         "repair_viable": true | false,
-        "primary_artisan_skill_needed": "string (e.g., zipper_replacement, seam_restoration, sole_reglue)",
+        "primary_artisan_skill_needed": "string (e.g., zipper_replacement, seam_restoration)",
         "estimated_repair_cost_usd": float,
         "repair_turnaround_hours": int,
         "defect_summary": "string explaining defect and rationale"
     }}
     """
     
-    # 3. Robust Error Handling to prevent 500 Server Crashes
     try:
-        image_part = Part.from_data(data=image_bytes, mime_type="image/jpeg")
-        response = model.generate_content([image_part, prompt])
+        # AI Studio format for images
+        image_part = {
+            "mime_type": "image/jpeg",
+            "data": image_bytes
+        }
         
+        response = model.generate_content([image_part, prompt])
         clean_text = response.text.replace("```json", "").replace("```", "").strip()
         return json.loads(clean_text)
         
     except Exception as e:
-        print(f"\n--- VERTEX AI ERROR ---\n{e}\n-----------------------\n")
-        # Graceful fallback so the frontend routing engine still works during a live demo
+        print(f"\n--- AI STUDIO ERROR ---\n{e}\n-----------------------\n")
         return {
             "defect_type": "api_connection_error",
             "severity": "minor",
