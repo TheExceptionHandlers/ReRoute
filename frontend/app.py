@@ -1,6 +1,7 @@
 import streamlit as st
 import requests
-import pandas as pd
+import folium
+from streamlit_folium import st_folium
 from PIL import Image
 
 st.set_page_config(
@@ -9,14 +10,26 @@ st.set_page_config(
     layout="wide"
 )
 
-# Custom Styling for polished Hackathon UI
 st.markdown("""
 <style>
-    .main-header { font-size: 2.2rem; font-weight: 700; color: #1E293B; margin-bottom: 0.2rem; }
+    .stApp { background-color: #0E1117; color: #FFFFFF; }
+    div[data-testid="metric-container"] {
+        background: rgba(255, 255, 255, 0.05);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        backdrop-filter: blur(10px);
+        border-radius: 12px;
+        padding: 20px;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+    }
+    .main-header {
+        background: -webkit-linear-gradient(#4facfe, #00f2fe);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        font-weight: 900;
+        font-size: 2.2rem; 
+        margin-bottom: 0.2rem;
+    }
     .sub-header { font-size: 1rem; color: #64748B; margin-bottom: 1.5rem; }
-    .metric-card { background-color: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 8px; padding: 16px; }
-    .status-badge { display: inline-block; padding: 4px 12px; border-radius: 12px; font-weight: 600; font-size: 0.85rem; }
-    .status-active { background-color: #DCFCE7; color: #166534; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -25,7 +38,6 @@ st.markdown('<div class="sub-header">Autonomous Agentic Reverse Logistics powere
 
 col_left, col_right = st.columns([1, 1], gap="large")
 
-# ----------------- Left Column: Customer Return Portal -----------------
 with col_left:
     st.subheader("📦 Customer Return Ingestion")
     
@@ -48,22 +60,27 @@ with col_left:
     
     if uploaded_file:
         image = Image.open(uploaded_file)
-        st.image(image, caption="Return Intake Inspection View", use_container_width=True)
+        st.image(image, caption="Return Intake Inspection View", width="stretch")
 
-    process_btn = st.button("⚡ Process Autonomous Triangulation", type="primary", use_container_width=True, disabled=not uploaded_file)
+    process_btn = st.button("⚡ Process Autonomous Triangulation", type="primary", width="stretch", disabled=not uploaded_file)
 
-# ----------------- Right Column: Multi-Agent Trace & Arbitrage -----------------
 with col_right:
     st.subheader("🤖 Agent Swarm Trace & Arbitrage Ledger")
+    
+    # 1. Initialize session state to hold the payload across page refreshes
+    if "payload" not in st.session_state:
+        st.session_state.payload = None
     
     if process_btn and uploaded_file:
         backend_url = "http://127.0.0.1:8000/api/v1/intercept"
         
         with st.status("Executing Autonomous Triangulation Protocol...", expanded=True) as status:
-            # Accurate model reflection
-            st.write("🔍 **Diagnostic Agent:** Invoking Gemini 3.8 Flash multimodal vision pipeline...")
+            st.write("🔍 **Diagnostic Agent:** Invoking Gemini multimodal vision pipeline...")
             
-            files = {"file": (uploaded_file.name, uploaded_file.getvalue(), uploaded_file.type)}
+            uploaded_file.seek(0)
+            file_bytes = uploaded_file.getvalue()
+            mime_type = uploaded_file.type if uploaded_file.type else "image/jpeg"
+            files = {"file": (uploaded_file.name, file_bytes, mime_type)}
             data = {
                 "product_name": selected_product,
                 "retail_price": str(retail_price),
@@ -72,59 +89,12 @@ with col_right:
             }
             
             try:
-                response = requests.post(backend_url, data=data, files=files, timeout=45)
+                response = requests.post(backend_url, data=data, files=files, timeout=90)
                 
                 if response.status_code == 200:
-                    payload = response.json()
-                    diag = payload.get("diagnosis", {})
-                    arb = payload.get("arbitrage", {})
-                    
-                    st.write(f"✅ **Diagnostic Agent Complete:** Detected `{diag.get('defect_type')}` (Severity: {diag.get('severity')})")
-                    st.write("📍 **Routing Agent:** Queried Firestore geospatial index for verified repair credentials...")
-                    
-                    artisan = arb.get("artisan_matched")
-                    dist = arb.get("distance_miles")
-                    
-                    if artisan:
-                        # Format distance cleanly
-                        dist_str = f"{dist:.2f} miles" if dist and dist >= 0.1 else "Within immediate neighborhood (<0.1 mi)"
-                        st.write(f"🎯 **Matched Artisan:** `{artisan.get('name')}` ({dist_str})")
-                    else:
-                        st.write("⚠️ **Routing Notice:** No qualified artisan within catchment radius; standard warehouse fallback applied.")
-                        
-                    st.write("⚖️ **Arbitrage Engine:** Evaluated reverse freight costs vs local recommerce delta.")
+                    # 2. Save data to session state instead of rendering immediately
+                    st.session_state.payload = response.json()
                     status.update(label="Triangulation & Settlement Completed!", state="complete")
-                    
-                    # ----------------- Results Dashboard -----------------
-                    st.divider()
-                    st.markdown("### 📊 Economic & Ecological Impact")
-                    
-                    m1, m2, m3 = st.columns(3)
-                    m1.metric("Brand Net Recovery", f"${arb.get('reroute_net_recovery', 0):.2f}", f"+${arb.get('net_savings_usd', 0):.2f} vs Hub Return")
-                    m2.metric("Local Repair Bounty", f"${diag.get('estimated_repair_cost_usd', 0):.2f}", artisan.get('name', 'N/A') if artisan else "None")
-                    m3.metric("Scope-3 CO₂ Avoided", f"{arb.get('avoided_co2_kg', 0):.1f} kg", "Avoided Long-haul Freight")
-                    
-                    st.divider()
-                    st.markdown("### 🗺️ Geospatial Routing & Settlement")
-                    
-                    if artisan:
-                        # Render dual coordinate markers for map visualization
-                        map_data = pd.DataFrame([
-                            {"lat": customer_lat, "lon": customer_lon, "type": "Customer"},
-                            {"lat": artisan.get("latitude"), "lon": artisan.get("longitude"), "type": "Artisan"}
-                        ])
-                        st.map(map_data, latitude="lat", longitude="lon", size=25, zoom=12)
-                        
-                        st.success(
-                            f"**Drop-off Partner:** {artisan.get('name')}\n\n"
-                            f"* **Distance:** {dist:.2f} miles\n"
-                            f"* **Turnaround Window:** {diag.get('repair_turnaround_hours', 24)} hours\n"
-                            f"* **Artisan Rating:** ⭐ {artisan.get('rating', 4.8)}/5.0\n"
-                            f"* **Escrow Action:** Bounty voucher held in escrow. Payout released automatically upon barcode scan at drop-off."
-                        )
-                    else:
-                        st.warning("Item scheduled for standard consolidated reverse shipment.")
-                        
                 else:
                     status.update(label="API Error", state="error")
                     st.error(f"Backend returned status {response.status_code}: {response.text}")
@@ -132,5 +102,89 @@ with col_right:
             except Exception as e:
                 status.update(label="Connection Failed", state="error")
                 st.error(f"Could not reach backend: {str(e)}")
-    else:
-        st.info("Upload an image on the left and click **Process Autonomous Triangulation** to view the live agent execution.")
+
+    # 3. Render the UI safely outside the button-click block
+    if st.session_state.payload:
+        payload = st.session_state.payload
+        diag = payload.get("diagnosis", {})
+        arb = payload.get("arbitrage", {})
+        
+        defect_name = diag.get("defect_type", "Defect identified")
+        severity_name = diag.get("severity", "moderate")
+        st.write(f"✅ **Diagnostic Agent Complete:** Detected `{defect_name}` (Severity: {severity_name})")
+        st.write("📍 **Routing Agent:** Queried verified local artisans...")
+        
+        artisan = arb.get("artisan_matched")
+        dist = arb.get("distance_miles")
+        
+        if artisan:
+            dist_val = float(dist) if dist is not None else 0.0
+            dist_str = f"{dist_val:.2f} miles" if dist_val >= 0.1 else "Within immediate neighborhood (<0.1 mi)"
+            st.write(f"🎯 **Matched Artisan:** `{artisan.get('name', 'Local Verified Partner')}` ({dist_str})")
+        else:
+            st.write("⚠️ **Routing Notice:** No qualified artisan within catchment radius; standard warehouse fallback applied.")
+            
+        st.write("⚖️ **Arbitrage Engine:** Evaluated reverse freight costs vs local recommerce delta.")
+        
+        st.divider()
+        st.markdown("### 📊 Economic & Ecological Impact")
+        
+        m1, m2, m3 = st.columns(3)
+        net_rec = arb.get("reroute_net_recovery", 0.0) or 0.0
+        net_sav = arb.get("net_savings_usd", 0.0) or 0.0
+        rep_cost = diag.get("estimated_repair_cost_usd", 0.0) or 0.0
+        co2_saved = arb.get("avoided_co2_kg", 0.0) or 0.0
+        
+        m1.metric("Brand Net Recovery", f"${float(net_rec):.2f}", f"+${float(net_sav):.2f} vs Hub Return")
+        m2.metric("Local Repair Bounty", f"${float(rep_cost):.2f}", artisan.get("name", "N/A") if artisan else "None")
+        m3.metric("Scope-3 CO₂ Avoided", f"{float(co2_saved):.1f} kg", "Avoided Long-haul Freight")
+        
+        st.divider()
+        st.markdown("### 🗺️ Live Geospatial Routing")
+        
+        if artisan and artisan.get("latitude") and artisan.get("longitude"):
+            try:
+                m = folium.Map(location=[customer_lat, customer_lon], zoom_start=13)
+
+                folium.Marker(
+                    [customer_lat, customer_lon],
+                    popup="Customer Location",
+                    icon=folium.Icon(color="red", icon="info-sign")
+                ).add_to(m)
+
+                art_lat = float(artisan["latitude"])
+                art_lon = float(artisan["longitude"])
+                art_name = artisan.get("name", "Artisan Partner")
+                art_rating = artisan.get("rating", 4.8)
+                art_address = artisan.get("address", "Bengaluru")
+
+                folium.Marker(
+                    [art_lat, art_lon],
+                    popup=f"<b>{art_name}</b><br>Rating: ⭐{art_rating}<br>{art_address}",
+                    icon=folium.Icon(color="green", icon="wrench")
+                ).add_to(m)
+
+                folium.PolyLine(
+                    locations=[[customer_lat, customer_lon], [art_lat, art_lon]],
+                    color="#00f2fe",
+                    weight=3,
+                    dash_array="5, 5"
+                ).add_to(m)
+
+                st_folium(m, width=700, height=400)
+                
+                dist_display = f"{float(dist):.2f} miles" if dist is not None else "Local"
+                turnaround = diag.get("repair_turnaround_hours", 24)
+                
+                st.success(
+                    f"**Drop-off Partner:** {art_name}\n\n"
+                    f"* **Address:** {art_address}\n"
+                    f"* **Distance:** {dist_display}\n"
+                    f"* **Turnaround Window:** {turnaround} hours\n"
+                    f"* **Escrow Action:** Bounty voucher held in escrow. Payout released automatically upon barcode scan at drop-off."
+                )
+            except Exception as map_err:
+                st.error(f"Map display notice: {map_err}")
+                st.json(arb)
+        else:
+            st.warning("Item scheduled for standard consolidated reverse shipment.")

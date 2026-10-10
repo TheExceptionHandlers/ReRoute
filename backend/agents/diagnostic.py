@@ -1,46 +1,56 @@
 import json
 import os
-import google.generativeai as genai
+from google import genai
+from google.genai import types
 
-# Keep this so your Firestore database doesn't break!
 if "GOOGLE_APPLICATION_CREDENTIALS" not in os.environ:
     os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = "gcp-credentials.json"
 
-# Bypass Vertex AI and use the instant Developer API
-genai.configure(api_key="AQ.Ab8RN6JRs5qa1m4QgxJSpVSdWn-lAde5jjpHES2KevAeW4UElQ")
-
-# Explicitly use the newest model as required by the API
-model = genai.GenerativeModel("gemini-3.8-flash")
+# Delete the dummy string and paste your REAL Gemini API key!
+client = genai.Client(api_key="AQ.Ab8RN6KG-7k-goMrlDN3ZurbXYdnvhYAYqNrtzv1gstXw3UhTw")
 
 def inspect_defect(image_bytes: bytes, product_name: str, retail_price: float) -> dict:
+    if not image_bytes:
+        raise ValueError("Image bytes are empty! The backend received a 0-byte file.")
+
     prompt = f"""
     You are an expert e-commerce quality assurance and circular repair auditor for 'ReRoute'.
     Inspect this customer-returned item: "{product_name}" (Original MSRP: ${retail_price}).
-
     Assess whether the defect can be repaired locally rather than shipping back to a central warehouse.
 
-    Return your output strictly as valid JSON with no markdown backticks or commentary, adhering to this structure:
+    Return EXACTLY this JSON structure and nothing else:
     {{
-        "defect_type": "string (e.g., zipper_slider_off_track, torn_seam, sole_separation)",
-        "severity": "minor" | "moderate" | "severe",
-        "repair_viable": true | false,
-        "primary_artisan_skill_needed": "string (e.g., zipper_replacement, seam_restoration)",
-        "estimated_repair_cost_usd": float,
-        "repair_turnaround_hours": int,
-        "defect_summary": "string explaining defect and rationale"
+        "defect_type": "zipper_separation",
+        "severity": "minor",
+        "repair_viable": true,
+        "primary_artisan_skill_needed": "zipper_replacement",
+        "estimated_repair_cost_usd": 15.00,
+        "repair_turnaround_hours": 24,
+        "defect_summary": "Brief explanation of the defect"
     }}
     """
     
     try:
-        # AI Studio format for images
-        image_part = {
-            "mime_type": "image/jpeg",
-            "data": image_bytes
-        }
+        print(f"-> [1/3] Packaging image bytes... (Size: {len(image_bytes)} bytes)")
         
-        response = model.generate_content([image_part, prompt])
-        clean_text = response.text.replace("```json", "").replace("```", "").strip()
-        return json.loads(clean_text)
+        image_part = types.Part.from_bytes(
+            data=image_bytes,
+            mime_type="image/jpeg"
+        )
+        
+        print("-> [2/3] Sending to Gemini API (Strict JSON Mode)...")
+        
+        # Enforcing JSON mode directly in the config prevents 504 Deadlines caused by formatting loops
+        response = client.models.generate_content(
+            model="gemini-3.8-flash",
+            contents=[image_part, prompt],
+            config=types.GenerateContentConfig(
+                response_mime_type="application/json"
+            )
+        )
+        
+        print("-> [3/3] Gemini response received!")
+        return json.loads(response.text)
         
     except Exception as e:
         print(f"\n--- AI STUDIO ERROR ---\n{e}\n-----------------------\n")
