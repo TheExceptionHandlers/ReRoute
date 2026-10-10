@@ -22,9 +22,11 @@ async def intercept_return(
     diagnosis = inspect_defect(image_bytes, product_name, retail_price)
 
     # 2. Run Geospatial Matching & Economic Arbitrage
-    skill = diagnosis.get("primary_artisan_skill_needed", "zipper_replacement")
+    # --- CHANGED LINES BELOW ---
+    defect = diagnosis.get("defect_type", "zipper_replacement")
     est_cost = diagnosis.get("estimated_repair_cost_usd", 8.00)
-    routing = match_artisan_and_arbitrage(customer_lat, customer_lon, skill, retail_price, est_cost)
+    routing = match_artisan_and_arbitrage(customer_lat, customer_lon, defect, retail_price, est_cost)
+    # --- CHANGED LINES ABOVE ---
 
     return {
         "diagnosis": diagnosis,

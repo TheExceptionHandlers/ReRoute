@@ -1,8 +1,15 @@
+# Core Backend & Frontend
 fastapi
 uvicorn
-google-cloud-aiplatform
-google-cloud-firestore
-google-cloud-bigquery
+python-multipart
 pydantic
-pillow
 streamlit
+pillow
+requests
+pandas
+
+# Google Cloud & AI Integrations
+google-generativeai
+google-cloud-firestore
+google-cloud-aiplatform
+google-cloud-bigquery
