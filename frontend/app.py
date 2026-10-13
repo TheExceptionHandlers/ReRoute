@@ -3,188 +3,289 @@ import requests
 import folium
 from streamlit_folium import st_folium
 from PIL import Image
+from streamlit_geolocation import streamlit_geolocation
 
-st.set_page_config(
-    page_title="ReRoute | Zero-Hub Reverse Triangulation",
-    page_icon="🔄",
-    layout="wide"
-)
+# --- STATE MANAGEMENT ---
+if "payload" not in st.session_state:
+    st.session_state.payload = None
+if "loc_lat" not in st.session_state:
+    st.session_state.loc_lat = 12.9716
+if "loc_lon" not in st.session_state:
+    st.session_state.loc_lon = 77.5946
+if "loc_address" not in st.session_state:
+    st.session_state.loc_address = ""
+if "last_gps_fetch" not in st.session_state:
+    st.session_state.last_gps_fetch = None
+if "needs_confirmation" not in st.session_state:
+    st.session_state.needs_confirmation = False
+if "location_confirmed" not in st.session_state:
+    st.session_state.location_confirmed = False
+if "manual_override" not in st.session_state:
+    st.session_state.manual_override = False
+if "manual_address" not in st.session_state:
+    st.session_state.manual_address = ""
 
+# --- GEOCODING HELPERS (Free OpenStreetMap API) ---
+def reverse_geocode(lat, lon):
+    """Converts Map Coordinates to Street Address"""
+    try:
+        url = f"https://nominatim.openstreetmap.org/reverse?format=json&lat={lat}&lon={lon}&zoom=18&addressdetails=1"
+        headers = {'User-Agent': 'ReRoute-Enterprise-Dashboard/1.0'}
+        res = requests.get(url, headers=headers, timeout=5)
+        if res.status_code == 200:
+            return res.json().get('display_name', 'Address not found')
+    except Exception:
+        pass
+    return f"Lat: {lat:.5f}, Lon: {lon:.5f}"
+
+def forward_geocode(address):
+    """Converts Typed Address to Map Coordinates"""
+    try:
+        url = f"https://nominatim.openstreetmap.org/search?q={address}&format=json&limit=1"
+        headers = {'User-Agent': 'ReRoute-Enterprise-Dashboard/1.0'}
+        res = requests.get(url, headers=headers, timeout=5)
+        if res.status_code == 200 and len(res.json()) > 0:
+            data = res.json()[0]
+            return float(data['lat']), float(data['lon'])
+    except Exception:
+        pass
+    return None, None
+
+def sync_manual_input():
+    """Callback triggered when user hits Enter in the manual address box"""
+    addr = st.session_state.manual_address
+    if addr:
+        lat, lon = forward_geocode(addr)
+        if lat and lon:
+            st.session_state.loc_lat = lat
+            st.session_state.loc_lon = lon
+            st.session_state.loc_address = addr
+
+# --- MODAL DIALOG (Auto-Detect Confirmation) ---
+@st.dialog("📍 Confirm Auto-Detected Location")
+def location_confirmation_dialog():
+    st.markdown(f"**Detected Address:**\n{st.session_state.loc_address}")
+    st.caption("🖱️ **Zoom in and click anywhere on the map** to adjust your exact location.")
+    
+    try:
+        preview_map = folium.Map(
+            location=[st.session_state.loc_lat, st.session_state.loc_lon], 
+            zoom_start=17, 
+            tiles="https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}",
+            attr="Google Maps"
+        )
+        folium.Marker([st.session_state.loc_lat, st.session_state.loc_lon], icon=folium.Icon(color="red", icon="user")).add_to(preview_map)
+        map_data = st_folium(preview_map, height=300, use_container_width=True, key="dialog_map", returned_objects=["last_clicked"])
+        
+        if map_data and map_data.get("last_clicked"):
+            c_lat = map_data["last_clicked"]["lat"]
+            c_lon = map_data["last_clicked"]["lng"]
+            if round(c_lat, 5) != round(st.session_state.loc_lat, 5):
+                st.session_state.loc_lat = c_lat
+                st.session_state.loc_lon = c_lon
+                st.session_state.loc_address = reverse_geocode(c_lat, c_lon)
+                st.rerun()
+    except Exception:
+        st.caption("Map preview unavailable.")
+
+    col1, col2 = st.columns(2)
+    with col1:
+        if st.button("❌ Enter Manually", use_container_width=True):
+            # Close dialog and trigger manual override mode
+            st.session_state.needs_confirmation = False
+            st.session_state.manual_override = True
+            st.session_state.manual_address = st.session_state.loc_address # Pre-fill with best guess
+            st.rerun()
+    with col2:
+        if st.button("✅ Confirm Location", type="primary", use_container_width=True):
+            st.session_state.needs_confirmation = False
+            st.session_state.location_confirmed = True
+            st.rerun()
+
+# --- PAGE UI & STYLING ---
+st.set_page_config(page_title="ReRoute | Zero-Hub Reverse Logistics", layout="wide", initial_sidebar_state="collapsed")
 st.markdown("""
 <style>
-    .stApp { background-color: #0E1117; color: #FFFFFF; }
-    div[data-testid="metric-container"] {
-        background: rgba(255, 255, 255, 0.05);
-        border: 1px solid rgba(255, 255, 255, 0.1);
-        backdrop-filter: blur(10px);
-        border-radius: 12px;
-        padding: 20px;
-        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
-    }
-    .main-header {
-        background: -webkit-linear-gradient(#4facfe, #00f2fe);
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
-        font-weight: 900;
-        font-size: 2.2rem; 
-        margin-bottom: 0.2rem;
-    }
-    .sub-header { font-size: 1rem; color: #64748B; margin-bottom: 1.5rem; }
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;700&display=swap');
+    .stApp { font-family: 'Inter', sans-serif; background-color: #f8fafc; color: #0f172a; }
+    [data-testid="stFileUploadDropzone"] { border: 2px dashed #94a3b8 !important; border-radius: 8px !important; background-color: #ffffff !important; padding: 24px !important; }
+    .metric-wrapper { background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 20px; text-align: center; height: 100%; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
+    .metric-label { font-size: 0.75rem; text-transform: uppercase; color: #64748b; font-weight: 600; margin-bottom: 8px; }
+    .metric-value { font-family: 'JetBrains Mono', monospace; font-size: 2rem; font-weight: 700; color: #0f172a; margin: 0; }
+    .metric-value.positive { color: #10b981; }
+    .status-banner { font-family: 'JetBrains Mono', monospace; padding: 14px 20px; border-radius: 6px; font-weight: 700; margin-bottom: 24px; font-size: 0.9rem; display: flex; gap: 10px; }
+    .status-idle { background-color: #f1f5f9; color: #475569; border: 1px solid #cbd5e1; }
+    .status-active { background-color: #ecfdf5; color: #059669; border: 1px solid #34d399; }
 </style>
 """, unsafe_allow_html=True)
 
-st.markdown('<div class="main-header">🔄 ReRoute: Zero-Hub Reverse Triangulation</div>', unsafe_allow_html=True)
-st.markdown('<div class="sub-header">Autonomous Agentic Reverse Logistics powered by Gemini & Google Cloud</div>', unsafe_allow_html=True)
+def render_metric_card(label, value, positive=False):
+    return f'<div class="metric-wrapper"><div class="metric-label">{label}</div><p class="metric-value{" positive" if positive else ""}">{value}</p></div>'
 
-col_left, col_right = st.columns([1, 1], gap="large")
+st.title("ReRoute")
+st.markdown("<p style='color: #64748b; font-size: 1.1rem; margin-top: -10px; margin-bottom: 2rem;'>Autonomous Multi-Agent Reverse Logistics Dashboard</p>", unsafe_allow_html=True)
 
+col_left, col_right = st.columns([1, 1.4], gap="large")
+
+# --- LEFT COLUMN: INPUTS ---
 with col_left:
-    st.subheader("📦 Customer Return Ingestion")
+    with st.container(border=True):
+        st.markdown("##### 📦 Item Particulars")
+        c1, c2 = st.columns(2)
+        with c1:
+            product_options = {"Alpine Trail Shell Jacket": 120.00, "Vanguard All-Terrain Boots": 145.00, "Merino Wool Commuter Sweater": 85.00}
+            selected_product = st.selectbox("Select Returned Item", list(product_options.keys()), label_visibility="collapsed")
+        with c2:
+            retail_price = st.number_input("Retail Price (USD)", value=product_options[selected_product], format="%.2f")
     
-    product_options = {
-        "Alpine Trail Shell Jacket": 120.00,
-        "Vanguard All-Terrain Boots": 145.00,
-        "Merino Wool Commuter Sweater": 85.00
-    }
-    
-    selected_product = st.selectbox("Select Returned Item", list(product_options.keys()))
-    retail_price = st.number_input("Retail Price (USD)", value=product_options[selected_product], step=5.0)
-    
-    customer_coords = st.columns(2)
-    with customer_coords[0]:
-        customer_lat = st.number_input("Customer Latitude", value=12.9716, format="%.4f")
-    with customer_coords[1]:
-        customer_lon = st.number_input("Customer Longitude", value=77.5946, format="%.4f")
+    st.markdown("<div style='margin-bottom: 15px;'></div>", unsafe_allow_html=True)
 
-    uploaded_file = st.file_uploader("Upload Inspection Photo (Defect/Damage)", type=["jpg", "jpeg", "png"])
-    
-    if uploaded_file:
-        image = Image.open(uploaded_file)
-        st.image(image, caption="Return Intake Inspection View", width="stretch")
-
-    process_btn = st.button("⚡ Process Autonomous Triangulation", type="primary", width="stretch", disabled=not uploaded_file)
-
-with col_right:
-    st.subheader("🤖 Agent Swarm Trace & Arbitrage Ledger")
-    
-    # 1. Initialize session state to hold the payload across page refreshes
-    if "payload" not in st.session_state:
-        st.session_state.payload = None
-    
-    if process_btn and uploaded_file:
-        backend_url = "http://127.0.0.1:8000/api/v1/intercept"
+    with st.container(border=True):
+        st.markdown("##### 📍 Drop-off Coordinates")
         
-        with st.status("Executing Autonomous Triangulation Protocol...", expanded=True) as status:
-            st.write("🔍 **Diagnostic Agent:** Invoking Gemini multimodal vision pipeline...")
+        # 1. Device GPS Fetch
+        gps_data = streamlit_geolocation()
+        if gps_data and gps_data.get('latitude'):
+            current_gps = f"{gps_data['latitude']},{gps_data['longitude']}"
+            if current_gps != st.session_state.last_gps_fetch:
+                st.session_state.last_gps_fetch = current_gps
+                st.session_state.loc_lat = float(gps_data['latitude'])
+                st.session_state.loc_lon = float(gps_data['longitude'])
+                st.session_state.loc_address = reverse_geocode(st.session_state.loc_lat, st.session_state.loc_lon)
+                st.session_state.needs_confirmation = True
+                st.session_state.manual_override = False # Reset manual override if GPS is clicked again
+                st.rerun()
+
+        if st.session_state.needs_confirmation:
+            location_confirmation_dialog()
+
+        # 2. Main Logic Flow for Location UI
+        if st.session_state.location_confirmed:
+            st.success("✅ Location Confirmed")
+            st.text_area("📝 Confirmed Address", value=st.session_state.loc_address, height=68, disabled=True)
+            if st.button("🔄 Edit / Change Location", size="small"):
+                st.session_state.location_confirmed = False
+                st.session_state.manual_override = True
+                st.rerun()
+                
+        elif st.session_state.manual_override:
+            st.warning("✏️ **Manual Entry Mode:** Type an address below (press Enter) OR click the map to drop a pin.")
             
-            uploaded_file.seek(0)
-            file_bytes = uploaded_file.getvalue()
-            mime_type = uploaded_file.type if uploaded_file.type else "image/jpeg"
-            files = {"file": (uploaded_file.name, file_bytes, mime_type)}
-            data = {
-                "product_name": selected_product,
-                "retail_price": str(retail_price),
-                "customer_lat": str(customer_lat),
-                "customer_lon": str(customer_lon)
-            }
+            # Text input tied to forward geocoding
+            st.text_input("Search Address:", key="manual_address", on_change=sync_manual_input)
             
             try:
-                response = requests.post(backend_url, data=data, files=files, timeout=90)
+                # Interactive Map
+                m_map = folium.Map(location=[st.session_state.loc_lat, st.session_state.loc_lon], zoom_start=15, tiles="https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}", attr="Google Maps")
+                folium.Marker([st.session_state.loc_lat, st.session_state.loc_lon], icon=folium.Icon(color="blue", icon="info-sign")).add_to(m_map)
                 
-                if response.status_code == 200:
-                    # 2. Save data to session state instead of rendering immediately
-                    st.session_state.payload = response.json()
-                    status.update(label="Triangulation & Settlement Completed!", state="complete")
-                else:
-                    status.update(label="API Error", state="error")
-                    st.error(f"Backend returned status {response.status_code}: {response.text}")
-                    
-            except Exception as e:
-                status.update(label="Connection Failed", state="error")
-                st.error(f"Could not reach backend: {str(e)}")
+                m_data = st_folium(m_map, height=300, use_container_width=True, key="manual_map", returned_objects=["last_clicked"])
+                
+                # If map is clicked, reverse geocode and update text box
+                if m_data and m_data.get("last_clicked"):
+                    c_lat = m_data["last_clicked"]["lat"]
+                    c_lon = m_data["last_clicked"]["lng"]
+                    if round(c_lat, 5) != round(st.session_state.loc_lat, 5):
+                        st.session_state.loc_lat = c_lat
+                        st.session_state.loc_lon = c_lon
+                        new_addr = reverse_geocode(c_lat, c_lon)
+                        st.session_state.loc_address = new_addr
+                        st.session_state.manual_address = new_addr
+                        st.rerun()
+            except Exception:
+                st.caption("Map preview unavailable.")
+                
+            if st.button("✅ Confirm Location", type="primary", use_container_width=True):
+                st.session_state.location_confirmed = True
+                st.session_state.manual_override = False
+                st.rerun()
+        else:
+            st.info("👆 Click the location button above to detect and confirm your coordinates.")
 
-    # 3. Render the UI safely outside the button-click block
+    st.markdown("<div style='margin-bottom: 15px;'></div>", unsafe_allow_html=True)
+
+    with st.container(border=True):
+        st.markdown("##### 🔍 Defect Telemetry")
+        uploaded_file = st.file_uploader("Upload inspection image (JPG/PNG)", type=["jpg", "jpeg", "png"], label_visibility="collapsed")
+        if uploaded_file:
+            st.image(Image.open(uploaded_file), caption="Intake Feed Locked", use_container_width=True)
+
+    st.markdown("<div style='margin-bottom: 15px;'></div>", unsafe_allow_html=True)
+    process_btn = st.button("⚡ Initialize Agent Swarm Execution", use_container_width=True, type="primary", disabled=not (uploaded_file and st.session_state.location_confirmed))
+
+# --- RIGHT COLUMN: METRICS & ROUTING ---
+with col_right:
+    if process_btn and uploaded_file:
+        st.session_state.payload = None 
+        backend_url = "http://127.0.0.1:8000/api/v1/intercept"
+        
+        with st.status("Executing Agentic Logistics Pipeline...", expanded=True) as status:
+            st.write("Initializing Diagnostic Agent...")
+            uploaded_file.seek(0)
+            file_bytes = uploaded_file.getvalue()
+            files = {"file": (uploaded_file.name, file_bytes, uploaded_file.type or "image/jpeg")}
+            
+            data = {
+                "product_name": selected_product, 
+                "retail_price": str(retail_price), 
+                "customer_lat": str(st.session_state.loc_lat), 
+                "customer_lon": str(st.session_state.loc_lon),
+                "customer_address": st.session_state.loc_address
+            }
+            try:
+                response = requests.post(backend_url, data=data, files=files, timeout=90)
+                if response.status_code == 200:
+                    st.session_state.payload = response.json()
+                    status.update(label="Triangulation Protocol Complete", state="complete")
+                else:
+                    status.update(label="API Handshake Failed", state="error")
+                    st.error(f"Backend Error [{response.status_code}]: {response.text}")
+            except Exception as e:
+                status.update(label="Network Timeout", state="error")
+                st.error(f"Could not reach backend server: {str(e)}\n\nMake sure your FastAPI server is running on port 8000!")
+
     if st.session_state.payload:
+        st.markdown('<div class="status-banner status-active">● SYSTEM STATUS: ARBITRAGE LOCKED & ROUTED</div>', unsafe_allow_html=True)
         payload = st.session_state.payload
         diag = payload.get("diagnosis", {})
         arb = payload.get("arbitrage", {})
+        artisan = arb.get("artisan_matched", {})
         
-        defect_name = diag.get("defect_type", "Defect identified")
-        severity_name = diag.get("severity", "moderate")
-        st.write(f"✅ **Diagnostic Agent Complete:** Detected `{defect_name}` (Severity: {severity_name})")
-        st.write("📍 **Routing Agent:** Queried verified local artisans...")
-        
-        artisan = arb.get("artisan_matched")
-        dist = arb.get("distance_miles")
-        
-        if artisan:
-            dist_val = float(dist) if dist is not None else 0.0
-            dist_str = f"{dist_val:.2f} miles" if dist_val >= 0.1 else "Within immediate neighborhood (<0.1 mi)"
-            st.write(f"🎯 **Matched Artisan:** `{artisan.get('name', 'Local Verified Partner')}` ({dist_str})")
-        else:
-            st.write("⚠️ **Routing Notice:** No qualified artisan within catchment radius; standard warehouse fallback applied.")
+        mc1, mc2, mc3 = st.columns(3)
+        with mc1: st.markdown(render_metric_card("Arbitrage Spread", f"${arb.get('net_savings_usd', 0.0):.2f}", positive=True), unsafe_allow_html=True)
+        with mc2: st.markdown(render_metric_card("Carbon Prevented", f"{arb.get('avoided_co2_kg', 0.0):.1f}kg", positive=True), unsafe_allow_html=True)
+        with mc3:
+            dist = arb.get('distance_miles')
+            dist_display = f"{float(dist):.2f}mi" if dist is not None else "Local"
+            st.markdown(render_metric_card("Routing Radius", dist_display), unsafe_allow_html=True)
             
-        st.write("⚖️ **Arbitrage Engine:** Evaluated reverse freight costs vs local recommerce delta.")
+        st.markdown("<div style='margin-bottom: 24px;'></div>", unsafe_allow_html=True)
         
-        st.divider()
-        st.markdown("### 📊 Economic & Ecological Impact")
-        
-        m1, m2, m3 = st.columns(3)
-        net_rec = arb.get("reroute_net_recovery", 0.0) or 0.0
-        net_sav = arb.get("net_savings_usd", 0.0) or 0.0
-        rep_cost = diag.get("estimated_repair_cost_usd", 0.0) or 0.0
-        co2_saved = arb.get("avoided_co2_kg", 0.0) or 0.0
-        
-        m1.metric("Brand Net Recovery", f"${float(net_rec):.2f}", f"+${float(net_sav):.2f} vs Hub Return")
-        m2.metric("Local Repair Bounty", f"${float(rep_cost):.2f}", artisan.get("name", "N/A") if artisan else "None")
-        m3.metric("Scope-3 CO₂ Avoided", f"{float(co2_saved):.1f} kg", "Avoided Long-haul Freight")
-        
-        st.divider()
-        st.markdown("### 🗺️ Live Geospatial Routing")
-        
-        if artisan and artisan.get("latitude") and artisan.get("longitude"):
-            try:
-                m = folium.Map(location=[customer_lat, customer_lon], zoom_start=13)
-
-                folium.Marker(
-                    [customer_lat, customer_lon],
-                    popup="Customer Location",
-                    icon=folium.Icon(color="red", icon="info-sign")
-                ).add_to(m)
-
-                art_lat = float(artisan["latitude"])
-                art_lon = float(artisan["longitude"])
-                art_name = artisan.get("name", "Artisan Partner")
-                art_rating = artisan.get("rating", 4.8)
-                art_address = artisan.get("address", "Bengaluru")
-
-                folium.Marker(
-                    [art_lat, art_lon],
-                    popup=f"<b>{art_name}</b><br>Rating: ⭐{art_rating}<br>{art_address}",
-                    icon=folium.Icon(color="green", icon="wrench")
-                ).add_to(m)
-
-                folium.PolyLine(
-                    locations=[[customer_lat, customer_lon], [art_lat, art_lon]],
-                    color="#00f2fe",
-                    weight=3,
-                    dash_array="5, 5"
-                ).add_to(m)
-
-                st_folium(m, width=700, height=400)
-                
-                dist_display = f"{float(dist):.2f} miles" if dist is not None else "Local"
-                turnaround = diag.get("repair_turnaround_hours", 24)
-                
-                st.success(
-                    f"**Drop-off Partner:** {art_name}\n\n"
-                    f"* **Address:** {art_address}\n"
-                    f"* **Distance:** {dist_display}\n"
-                    f"* **Turnaround Window:** {turnaround} hours\n"
-                    f"* **Escrow Action:** Bounty voucher held in escrow. Payout released automatically upon barcode scan at drop-off."
+        with st.container(border=True):
+            st.markdown("##### 🗺️ Geospatial Drop-off Telemetry")
+            if artisan and artisan.get("latitude") and artisan.get("longitude"):
+                st.info(
+                    f"**Matched Partner:** {artisan.get('name', 'Artisan Partner')} | **SLA:** {diag.get('repair_turnaround_hours', 24)}h\n\n"
+                    f"**Address:** {artisan.get('address', 'N/A')}\n\n"
+                    f"**Defect Identified:** {str(diag.get('defect_type', 'Unknown')).replace('_', ' ').title()}"
                 )
-            except Exception as map_err:
-                st.error(f"Map display notice: {map_err}")
-                st.json(arb)
-        else:
-            st.warning("Item scheduled for standard consolidated reverse shipment.")
+                try:
+                    m = folium.Map(location=[st.session_state.loc_lat, st.session_state.loc_lon], zoom_start=14, tiles="https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}", attr="Google Maps")
+                    folium.Marker([st.session_state.loc_lat, st.session_state.loc_lon], popup="Customer Origin", icon=folium.Icon(color="red", icon="user")).add_to(m)
+                    art_lat, art_lon = float(artisan["latitude"]), float(artisan["longitude"])
+                    folium.Marker([art_lat, art_lon], popup=f"<b>{artisan.get('name')}</b>", icon=folium.Icon(color="green", icon="wrench")).add_to(m)
+                    folium.PolyLine([[st.session_state.loc_lat, st.session_state.loc_lon], [art_lat, art_lon]], color="#3b82f6", weight=4, dash_array="10, 10").add_to(m)
+                    st_folium(m, height=400, use_container_width=True, key="main_routing_map")
+                except Exception as map_err:
+                    st.error(f"Geospatial rendering temporarily unavailable: {map_err}")
+            else:
+                st.warning("No qualified artisans within catchment area. Defaulting to consolidated standard warehouse freight.")
+    else:
+        st.markdown('<div class="status-banner status-idle">○ SYSTEM STATUS: AWAITING INGESTION</div>', unsafe_allow_html=True)
+        mc1, mc2, mc3 = st.columns(3)
+        with mc1: st.markdown(render_metric_card("Arbitrage Spread", "—"), unsafe_allow_html=True)
+        with mc2: st.markdown(render_metric_card("Carbon Prevented", "—"), unsafe_allow_html=True)
+        with mc3: st.markdown(render_metric_card("Routing Radius", "—"), unsafe_allow_html=True)
+        st.markdown("<div style='margin-bottom: 24px;'></div>", unsafe_allow_html=True)
+        with st.container(border=True):
+            st.info("The dashboard is idling. Awaiting defect telemetry upload and swarm initialization to calculate real-time routing metrics.")
