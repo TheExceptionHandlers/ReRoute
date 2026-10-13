@@ -91,10 +91,9 @@ def location_confirmation_dialog():
     col1, col2 = st.columns(2)
     with col1:
         if st.button("❌ Enter Manually", use_container_width=True):
-            # Close dialog and trigger manual override mode
             st.session_state.needs_confirmation = False
             st.session_state.manual_override = True
-            st.session_state.manual_address = st.session_state.loc_address # Pre-fill with best guess
+            st.session_state.manual_address = st.session_state.loc_address 
             st.rerun()
     with col2:
         if st.button("✅ Confirm Location", type="primary", use_container_width=True):
@@ -153,7 +152,7 @@ with col_left:
                 st.session_state.loc_lon = float(gps_data['longitude'])
                 st.session_state.loc_address = reverse_geocode(st.session_state.loc_lat, st.session_state.loc_lon)
                 st.session_state.needs_confirmation = True
-                st.session_state.manual_override = False # Reset manual override if GPS is clicked again
+                st.session_state.manual_override = False 
                 st.rerun()
 
         if st.session_state.needs_confirmation:
@@ -163,7 +162,7 @@ with col_left:
         if st.session_state.location_confirmed:
             st.success("✅ Location Confirmed")
             st.text_area("📝 Confirmed Address", value=st.session_state.loc_address, height=68, disabled=True)
-            if st.button("🔄 Edit / Change Location", size="small"):
+            if st.button("🔄 Edit / Change Location"):
                 st.session_state.location_confirmed = False
                 st.session_state.manual_override = True
                 st.rerun()
