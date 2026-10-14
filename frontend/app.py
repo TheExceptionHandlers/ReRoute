@@ -236,6 +236,7 @@ with col_right:
                 if response.status_code == 200:
                     st.session_state.payload = response.json()
                     status.update(label="Triangulation Protocol Complete", state="complete")
+                    st.rerun() # FORCES UI TO REFRESH WITH METRICS
                 else:
                     status.update(label="API Handshake Failed", state="error")
                     st.error(f"Backend Error [{response.status_code}]: {response.text}")

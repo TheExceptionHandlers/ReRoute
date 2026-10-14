@@ -7,6 +7,12 @@ streamlit
 pillow
 requests
 pandas
+tenacity
+
+# Geospatial & Mapping
+folium
+streamlit-folium
+streamlit-geolocation
 
 # Google Cloud & AI Integrations
 google-generativeai

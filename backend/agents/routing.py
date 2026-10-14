@@ -2,8 +2,8 @@ import math
 import os
 import requests
 
-if "GOOGLE_APPLICATION_CREDENTIALS" not in os.environ:
-    os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = "gcp-credentials.json"
+# if "GOOGLE_APPLICATION_CREDENTIALS" not in os.environ:
+#     os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = "gcp-credentials.json"
 
 MAPS_API_KEY = os.environ.get("MAPS_API_KEY", "AIzaSyD3FQDY9KU4xyVrNi_FiCpFBcGeb7hXoPI")
 
