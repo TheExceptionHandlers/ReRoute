@@ -248,7 +248,10 @@ with col_right:
         st.markdown('<div class="status-banner status-active">● SYSTEM STATUS: ARBITRAGE LOCKED & ROUTED</div>', unsafe_allow_html=True)
         payload = st.session_state.payload
         diag = payload.get("diagnosis", {})
-        arb = payload.get("arbitrage", {})
+        
+        # --- FIX: UNPACK THE ADK 2.0 TOOL RESPONSE WRAPPER ---
+        raw_arb = payload.get("arbitrage", {})
+        arb = raw_arb.get("match_artisan_and_arbitrage_response", raw_arb)
         artisan = arb.get("artisan_matched", {})
         
         mc1, mc2, mc3 = st.columns(3)

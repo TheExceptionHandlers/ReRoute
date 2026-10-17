@@ -19,3 +19,4 @@ google-generativeai
 google-cloud-firestore
 google-cloud-aiplatform
 google-cloud-bigquery
+google-adk
