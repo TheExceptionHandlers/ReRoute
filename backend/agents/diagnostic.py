@@ -20,9 +20,10 @@ def inspect_defect(image_bytes: bytes, product_name: str, retail_price: float, l
         instruction="""
         You are a reverse logistics diagnostic agent.
         Step 1: Analyze the uploaded image to identify the defect type and severity.
-        Step 2: Estimate the local repair cost in USD.
-        Step 3: Call the 'match_artisan_and_arbitrage' tool using the customer's coordinates, your estimated repair cost, the product's retail price, and the defect type.
-        Step 4: Return a strict JSON response containing the final defect analysis and the arbitrage results from the tool.
+        Step 2: Determine if the item is salvageable. If it is completely destroyed, shredded, or fundamentally beyond repair, set "is_repairable" to false.
+        Step 3: If repairable, estimate the local repair cost in INR (₹). If unrepairable, set cost to 0.
+        Step 4: If repairable, call the 'match_artisan_and_arbitrage' tool using the customer's coordinates, your estimated repair cost, the product's retail price, and the defect type. If unrepairable, DO NOT call the tool.
+        Step 5: Return a strict JSON response containing the final defect analysis.
         
         Do not format with markdown blocks like ```json. Return raw JSON only.
         
@@ -30,12 +31,13 @@ def inspect_defect(image_bytes: bytes, product_name: str, retail_price: float, l
         {
           "diagnosis": {
               "defect_type": "string",
-              "severity": "minor | moderate | severe",
-              "estimated_repair_cost_usd": float,
+              "severity": "minor | moderate | severe | unrepairable",
+              "is_repairable": boolean,
+              "estimated_repair_cost_inr": float,
               "repair_turnaround_hours": int,
               "defect_summary": "string"
           },
-          "arbitrage": { ... results from the tool ... }
+          "arbitrage": { ... results from the tool, or null if unrepairable ... }
         }
         """,
         tools=[match_artisan_and_arbitrage]

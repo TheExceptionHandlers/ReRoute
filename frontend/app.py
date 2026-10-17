@@ -245,57 +245,69 @@ with col_right:
                 st.error(f"Could not reach backend server: {str(e)}\n\nMake sure your FastAPI server is running on port 8000!")
 
     if st.session_state.payload:
-        st.markdown('<div class="status-banner status-active">● REPAIR PARTNER FOUND & ROUTED</div>', unsafe_allow_html=True)
         payload = st.session_state.payload
         diag = payload.get("diagnosis", {})
-        
-        raw_arb = payload.get("arbitrage", {})
-        arb = raw_arb.get("match_artisan_and_arbitrage_response", raw_arb)
-        artisan = arb.get("artisan_matched", {})
-        
-        # Enterprise Metrics
-        st.markdown("#### Enterprise Savings Dashboard")
-        mc1, mc2, mc3 = st.columns(3)
-        with mc1: st.markdown(render_metric_card("Net Savings", f"₹{arb.get('net_savings_usd', 0.0):.2f}", positive=True), unsafe_allow_html=True)
-        with mc2: st.markdown(render_metric_card("CO₂ Saved", f"{arb.get('avoided_co2_kg', 0.0):.1f}kg", positive=True), unsafe_allow_html=True)
-        with mc3:
-            dist = arb.get('distance_miles')
-            dist_display = f"{float(dist):.2f} km" if dist is not None else "Local"
-            st.markdown(render_metric_card("Routing Distance", dist_display), unsafe_allow_html=True)
-            
-        st.markdown("<div style='margin-bottom: 24px;'></div>", unsafe_allow_html=True)
-        
-        # Dynamic Lifecycle Render
-        with st.container(border=True):
-            st.markdown(f"#### Return Plan: {selected_workflow.split(':')[0]}")
-            
-            if "Option A" in selected_workflow:
-                st.markdown("<div class='lifecycle-step'>🚶‍♂️ <b>You Drop It Off:</b> Take the item to the verified repair shop mapped below.</div>", unsafe_allow_html=True)
-                st.markdown("<div class='lifecycle-step'>🛠️ <b>Quick Fix:</b> The shop fixes the defect. Scan your app's QR code at the counter.</div>", unsafe_allow_html=True)
-                st.markdown("<div class='lifecycle-step'>💳 <b>Instant Refund:</b> We instantly refund your repair cost. You keep the fixed item!</div>", unsafe_allow_html=True)
-            else:
-                st.markdown("<div class='lifecycle-step'>🚚 <b>We Pick It Up:</b> A delivery partner collects the item from your doorstep.</div>", unsafe_allow_html=True)
-                st.markdown("<div class='lifecycle-step'>🛠️ <b>Local Repair:</b> It is dropped off at the local repair shop and fully restored.</div>", unsafe_allow_html=True)
-                st.markdown("<div class='lifecycle-step'>🛒 <b>Local Resale:</b> Instead of shipping it back to a warehouse, we list it locally for next-day delivery to a new buyer.</div>", unsafe_allow_html=True)
+        is_repairable = diag.get("is_repairable", True)
 
-        st.markdown("<div style='margin-bottom: 24px;'></div>", unsafe_allow_html=True)
+        if not is_repairable:
+            st.markdown('<div class="status-banner" style="background-color: #450a0a; color: #fca5a5; border: 1px solid #b91c1c;">● SYSTEM STATUS: TOTAL LOSS - ROUTED TO SALVAGE</div>', unsafe_allow_html=True)
+            st.error(f"**AI Diagnosis (Unrepairable):** {diag.get('defect_summary', 'Item is damaged beyond functional restoration limits.')}")
+            
+            with st.container(border=True):
+                st.markdown("#### Salvage & Liquidation Plan")
+                st.markdown("<div class='lifecycle-step' style='border-left-color: #ef4444;'>🛑 <b>Triage Triggered:</b> Item flagged as non-repairable. Escrow and routing networks bypassed.</div>", unsafe_allow_html=True)
+                st.markdown("<div class='lifecycle-step' style='border-left-color: #ef4444;'>♻️ <b>Recycling Protocol:</b> Customer instructed to discard item locally or drop at nearest textile/e-waste recycling point.</div>", unsafe_allow_html=True)
+                st.markdown("<div class='lifecycle-step' style='border-left-color: #ef4444;'>💳 <b>Immediate Settlement:</b> Instant refund issued. 100% of reverse-freight shipping costs avoided for dead inventory.</div>", unsafe_allow_html=True)
+        else:
+            st.markdown('<div class="status-banner status-active">● REPAIR PARTNER FOUND & ROUTED</div>', unsafe_allow_html=True)
+            
+            raw_arb = payload.get("arbitrage", {})
+            arb = raw_arb.get("match_artisan_and_arbitrage_response", raw_arb)
+            artisan = arb.get("artisan_matched", {})
+            
+            # Enterprise Metrics
+            st.markdown("#### Enterprise Savings Dashboard")
+            mc1, mc2, mc3 = st.columns(3)
+            with mc1: st.markdown(render_metric_card("Net Savings", f"₹{arb.get('net_savings_usd', 0.0):.2f}", positive=True), unsafe_allow_html=True)
+            with mc2: st.markdown(render_metric_card("CO₂ Saved", f"{arb.get('avoided_co2_kg', 0.0):.1f}kg", positive=True), unsafe_allow_html=True)
+            with mc3:
+                dist = arb.get('distance_miles')
+                dist_display = f"{float(dist):.2f} km" if dist is not None else "Local"
+                st.markdown(render_metric_card("Routing Distance", dist_display), unsafe_allow_html=True)
+                
+            st.markdown("<div style='margin-bottom: 24px;'></div>", unsafe_allow_html=True)
+            
+            # Dynamic Lifecycle Render
+            with st.container(border=True):
+                st.markdown(f"#### Return Plan: {selected_workflow.split(':')[0]}")
+                
+                if "Option A" in selected_workflow:
+                    st.markdown("<div class='lifecycle-step'>🚶‍♂️ <b>You Drop It Off:</b> Take the item to the verified repair shop mapped below.</div>", unsafe_allow_html=True)
+                    st.markdown("<div class='lifecycle-step'>🛠️ <b>Quick Fix:</b> The shop fixes the defect. Scan your app's QR code at the counter.</div>", unsafe_allow_html=True)
+                    st.markdown("<div class='lifecycle-step'>💳 <b>Instant Refund:</b> We instantly refund your repair cost. You keep the fixed item!</div>", unsafe_allow_html=True)
+                else:
+                    st.markdown("<div class='lifecycle-step'>🚚 <b>We Pick It Up:</b> A delivery partner collects the item from your doorstep.</div>", unsafe_allow_html=True)
+                    st.markdown("<div class='lifecycle-step'>🛠️ <b>Local Repair:</b> It is dropped off at the local repair shop and fully restored.</div>", unsafe_allow_html=True)
+                    st.markdown("<div class='lifecycle-step'>🛒 <b>Local Resale:</b> Instead of shipping it back to a warehouse, we list it locally for next-day delivery to a new buyer.</div>", unsafe_allow_html=True)
 
-        with st.container(border=True):
-            st.markdown("##### 🗺️ Local Repair Partner Details")
-            if artisan and artisan.get("latitude") and artisan.get("longitude"):
-                st.info(
-                    f"**Matched Shop:** {artisan.get('name', 'Artisan Partner')} | **Estimated Turnaround:** {diag.get('repair_turnaround_hours', 24)}h\n\n"
-                    f"**Address:** {artisan.get('address', 'N/A')}\n\n"
-                    f"**AI Diagnosis:** {str(diag.get('defect_type', 'Unknown')).replace('_', ' ').title()} - {diag.get('defect_summary', '')}"
-                )
-                try:
-                    m = folium.Map(location=[st.session_state.loc_lat, st.session_state.loc_lon], zoom_start=14, tiles="https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}", attr="Google Maps")
-                    folium.Marker([st.session_state.loc_lat, st.session_state.loc_lon], popup="Customer Location", icon=folium.Icon(color="red", icon="user")).add_to(m)
-                    art_lat, art_lon = float(artisan["latitude"]), float(artisan["longitude"])
-                    folium.Marker([art_lat, art_lon], popup=f"<b>{artisan.get('name')}</b>", icon=folium.Icon(color="green", icon="wrench")).add_to(m)
-                    folium.PolyLine([[st.session_state.loc_lat, st.session_state.loc_lon], [art_lat, art_lon]], color="#3b82f6", weight=4, dash_array="10, 10").add_to(m)
-                    st_folium(m, height=400, use_container_width=True, key="main_routing_map")
-                except Exception as map_err:
-                    st.error(f"Map rendering temporarily unavailable: {map_err}")
-            else:
-                st.warning("No qualified shops within catchment area. Item will be routed to standard returns warehouse.")
+            st.markdown("<div style='margin-bottom: 24px;'></div>", unsafe_allow_html=True)
+
+            with st.container(border=True):
+                st.markdown("##### 🗺️ Local Repair Partner Details")
+                if artisan and artisan.get("latitude") and artisan.get("longitude"):
+                    st.info(
+                        f"**Matched Shop:** {artisan.get('name', 'Artisan Partner')} | **Estimated Turnaround:** {diag.get('repair_turnaround_hours', 24)}h\n\n"
+                        f"**Address:** {artisan.get('address', 'N/A')}\n\n"
+                        f"**AI Diagnosis:** {str(diag.get('defect_type', 'Unknown')).replace('_', ' ').title()} - {diag.get('defect_summary', '')}"
+                    )
+                    try:
+                        m = folium.Map(location=[st.session_state.loc_lat, st.session_state.loc_lon], zoom_start=14, tiles="https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}", attr="Google Maps")
+                        folium.Marker([st.session_state.loc_lat, st.session_state.loc_lon], popup="Customer Location", icon=folium.Icon(color="red", icon="user")).add_to(m)
+                        art_lat, art_lon = float(artisan["latitude"]), float(artisan["longitude"])
+                        folium.Marker([art_lat, art_lon], popup=f"<b>{artisan.get('name')}</b>", icon=folium.Icon(color="green", icon="wrench")).add_to(m)
+                        folium.PolyLine([[st.session_state.loc_lat, st.session_state.loc_lon], [art_lat, art_lon]], color="#3b82f6", weight=4, dash_array="10, 10").add_to(m)
+                        st_folium(m, height=400, use_container_width=True, key="main_routing_map")
+                    except Exception as map_err:
+                        st.error(f"Map rendering temporarily unavailable: {map_err}")
+                else:
+                    st.warning("No qualified shops within catchment area. Item will be routed to standard returns warehouse.")
