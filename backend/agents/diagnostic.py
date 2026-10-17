@@ -51,7 +51,7 @@ def inspect_defect(image_bytes: bytes, product_name: str, retail_price: float, l
             user_id="customer"
         )
         
-        prompt = f"Analyze this {product_name} (MSRP: ${retail_price}) at coordinates {lat}, {lon}."
+        prompt = f"Analyze this {product_name} (MSRP: ₹{retail_price}) at coordinates {lat}, {lon}."
         content = types.Content(
             role="user", 
             parts=[
