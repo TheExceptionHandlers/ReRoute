@@ -5,8 +5,10 @@ import requests
 # if "GOOGLE_APPLICATION_CREDENTIALS" not in os.environ:
 #     os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = "gcp-credentials.json"
 
-MAPS_API_KEY = os.environ.get("MAPS_API_KEY", "AIzaSyD3FQDY9KU4xyVrNi_FiCpFBcGeb7hXoPI")
-
+MAPS_API_KEY = os.environ.get("MAPS_API_KEY")
+if not MAPS_API_KEY:
+    raise ValueError("CRITICAL: MAPS_API_KEY environment variable is missing.")
+    
 def fetch_live_artisans(lat: float, lon: float, skill_keyword: str) -> list:
     search_query = "tailor" if any(w in skill_keyword.lower() for w in ["zipper", "seam", "split", "tear"]) else "shoe repair shop"
     url = "https://places.googleapis.com/v1/places:searchText"
