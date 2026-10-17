@@ -5,3 +5,4 @@ gcp-credentials.json
 *.json
 !package.json
 .env
+.DS_Store

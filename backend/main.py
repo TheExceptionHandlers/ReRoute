@@ -3,7 +3,10 @@ from fastapi.responses import JSONResponse
 from backend.agents.diagnostic import inspect_defect
 from backend.agents.routing import match_artisan_and_arbitrage
 from backend.agents.fraud_guard import verify_repair_receipt
+from dotenv import load_dotenv
 import json
+
+load_dotenv() 
 
 app = FastAPI()
 
