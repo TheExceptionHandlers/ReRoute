@@ -161,9 +161,14 @@ if app_role == "🛠️ Artisan Partner Portal":
             cols[2].markdown(f"Status:\n`{job['status']}`")
             
             with cols[3]:
-                if job["status"] != "Completed & Escrow Released":
-                    if st.button(f"Mark Repair Complete", key=f"complete_job_{idx}", type="primary"):
-                        st.session_state.artisan_jobs[idx]["status"] = "Completed & Escrow Released"
+                status = job["status"]
+                if status == "Pending Pickup / Drop-off":
+                    if st.button("📥 Accept & Start Repair", key=f"action_job_{idx}", type="secondary"):
+                        job["status"] = "In Repair"
+                        st.rerun()
+                elif status == "In Repair":
+                    if st.button("🛠️ Mark Repair Complete", key=f"action_job_{idx}", type="primary"):
+                        job["status"] = "Completed & Escrow Released"
                         st.success("Escrow bounty released to artisan account!")
                         st.rerun()
                 else:
@@ -211,8 +216,12 @@ elif app_role == "🚚 Delivery Partner Portal":
                 st.success("✅ Delivery & Handoff Completed")
 
 # --- VIEW 3: ENTERPRISE MISSION CONTROL ---
+# --- VIEW: ENTERPRISE MISSION CONTROL & TREASURY ---
 elif app_role == "📈 Enterprise Mission Control":
-    st.markdown("### Executive Savings Overview (Last 30 Days)")
+    st.markdown("### 📈 Enterprise Executive Command Center")
+    st.markdown("<p style='color: #64748b;'>Real-time supply chain telemetry, ESG tracking, and escrow financial disbursement ledger.</p>", unsafe_allow_html=True)
+
+    # Executive Metrics Row
     m1, m2, m3, m4 = st.columns(4)
     m1.metric("Items Diverted Locally", "12,482", "+14%")
     m2.metric("Logistics Cost Saved", "₹48.5L", "+22%")
@@ -220,6 +229,8 @@ elif app_role == "📈 Enterprise Mission Control":
     m4.metric("Active Local Artisans", "843", "+42")
     
     st.divider()
+
+    # Analytics Charts Row
     col_chart1, col_chart2 = st.columns(2)
     with col_chart1:
         st.markdown("**Daily Freight Avoidance Savings (₹)**")
@@ -230,6 +241,49 @@ elif app_role == "📈 Enterprise Mission Control":
         defect_data = pd.DataFrame({"Category": ["Zippers", "Tears/Seams", "Soles", "Electronics"], "Count": [4500, 3200, 2100, 2682]}).set_index("Category")
         st.bar_chart(defect_data)
 
+    st.divider()
+
+    # --- NEW: ENTERPRISE ESCROW & PAYMENT DISBURSEMENT GATEWAY ---
+    st.markdown("### 💳 Enterprise Treasury & Payment Release Ledger")
+    st.info("Finance approval gateway for automated customer refunds (Fraud Guard verified) and artisan service bounty disbursements.")
+
+    tab_escrow_cust, tab_escrow_art = st.tabs(["🛒 Customer Refund Approvals", "🛠️ Artisan Payout Disbursements"])
+
+    with tab_escrow_cust:
+        st.markdown("#### Pending Customer Reimbursements (Fraud Guard Verified)")
+        cust_claims = pd.DataFrame([
+            {"Claim ID": "CLM-301", "Customer": "Sai Dasaradharam G.", "Item": "Alpine Trail Jacket", "Est. Cost": "₹450.00", "Receipt Bill": "Verified (₹440.00)", "Status": "Pending Approval"},
+            {"Claim ID": "CLM-302", "Customer": "Ananya Sharma", "Item": "Vanguard Boots", "Est. Cost": "₹600.00", "Receipt Bill": "Verified (₹590.00)", "Status": "Ready for Release"}
+        ])
+        
+        for idx, row in cust_claims.iterrows():
+            with st.container(border=True):
+                c_cols = st.columns([2, 2, 1, 1.5])
+                c_cols[0].markdown(f"**{row['Claim ID']}** — {row['Customer']}\n\n*Item:* {row['Item']}")
+                c_cols[1].markdown(f"*Estimate:* {row['Est. Cost']}\n\n*Bill Upload:* `{row['Receipt Bill']}`")
+                c_cols[2].markdown(f"Status:\n`{row['Status']}`")
+                with c_cols[3]:
+                    if st.button(f"💸 Release Refund", key=f"rel_cust_{idx}", type="primary"):
+                        st.success(f"Successfully disbursed refund for {row['Claim ID']}!")
+                        st.rerun()
+
+    with tab_escrow_art:
+        st.markdown("#### Artisan Repair Bounty Payouts (Milestone Completed)")
+        art_claims = pd.DataFrame([
+            {"Job ID": "JOB-9021", "Artisan Shop": "Stitch & Save Atelier", "Item": "Alpine Trail Jacket", "Bounty": "₹450.00", "Milestone": "Repair Completed"},
+            {"Job ID": "JOB-9022", "Artisan Shop": "EcoSole Cobblers", "Item": "All-Terrain Boots", "Bounty": "₹600.00", "Milestone": "Ready for Pickup"}
+        ])
+
+        for idx, row in art_claims.iterrows():
+            with st.container(border=True):
+                a_cols = st.columns([2, 2, 1, 1.5])
+                a_cols[0].markdown(f"**{row['Job ID']}** — {row['Artisan Shop']}\n\n*Item:* {row['Item']}")
+                a_cols[1].markdown(f"*Bounty Amount:* **{row['Bounty']}**")
+                a_cols[2].markdown(f"Milestone:\n`{row['Milestone']}`")
+                with a_cols[3]:
+                    if st.button(f"⚡ Release Payout", key=f"rel_art_{idx}", type="primary"):
+                        st.success(f"Successfully released escrow bounty for {row['Job ID']}!")
+                        st.rerun()
 # --- VIEW 4: CUSTOMER PORTAL ---
 else:
     is_active = st.session_state.payload is not None
