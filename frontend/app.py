@@ -23,6 +23,28 @@ if "last_clicked_lon" not in st.session_state: st.session_state.last_clicked_lon
 if "selected_workflow" not in st.session_state: st.session_state.selected_workflow = "Option A: Self Drop-off (Get Instant Refund)"
 if "selected_product" not in st.session_state: st.session_state.selected_product = "Alpine Trail Shell Jacket"
 if "retail_price" not in st.session_state: st.session_state.retail_price = 8500.00
+if "service_booked" not in st.session_state: st.session_state.service_booked = False
+
+# Mock Artisan Job Queue state for the demo
+if "artisan_jobs" not in st.session_state:
+    st.session_state.artisan_jobs = [
+        {"id": "JOB-9021", "item": "Alpine Trail Shell Jacket", "defect": "Stuck/Misaligned Zipper", "eta": "24h", "bounty": "₹450.00", "status": "Pending Pickup / Drop-off"},
+        {"id": "JOB-9022", "item": "Vanguard All-Terrain Boots", "defect": "Sole Separation", "eta": "48h", "bounty": "₹600.00", "status": "In Repair"},
+        {"id": "JOB-9023", "item": "Merino Wool Commuter Sweater", "defect": "Sleeve Tear", "eta": "12h", "bounty": "₹300.00", "status": "Completed & Escrow Released"}
+    ]
+
+# Mock Delivery Tasks for the Courier Portal
+if "delivery_tasks" not in st.session_state:
+    st.session_state.delivery_tasks = [
+        {
+            "id": "DEL-501", 
+            "customer_name": "Sai Dasaradharam G.", 
+            "item": "Alpine Trail Shell Jacket", 
+            "pickup_address": "Koramangala 4th Block, Bengaluru, India", 
+            "handoff_address": "Stitch & Save Atelier, Koramangala 4th Block, Bengaluru", 
+            "status": "Assigned - En Route to Pickup"
+        }
+    ]
 
 # --- GEOCODING HELPER ---
 def reverse_geocode(lat, lon):
@@ -37,18 +59,66 @@ def reverse_geocode(lat, lon):
 st.set_page_config(page_title="ReRoute | Smart Returns", layout="wide", initial_sidebar_state="collapsed")
 st.markdown("""
 <style>
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;700&display=swap');
-    .stApp { font-family: 'Inter', sans-serif; }
-    [data-testid="stFileUploadDropzone"] { border: 2px dashed #475569 !important; border-radius: 8px !important; background-color: #0f172a !important; padding: 24px !important; transition: all 0.2s; }
-    [data-testid="stFileUploadDropzone"]:hover { border-color: #3b82f6 !important; background-color: #1e293b !important; }
+    @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;700&display=swap');
     
-    .metric-wrapper { background-color: #1e293b; border: 1px solid #334155; border-radius: 8px; padding: 20px; text-align: center; height: 100%; box-shadow: 0 4px 6px rgba(0,0,0,0.3); }
-    .metric-label { font-size: 0.75rem; text-transform: uppercase; color: #94a3b8; font-weight: 600; margin-bottom: 8px; }
-    .metric-value { font-family: 'JetBrains Mono', monospace; font-size: 2rem; font-weight: 700; color: #f8fafc; margin: 0; }
+    .stApp { 
+        font-family: 'Plus Jakarta Sans', sans-serif; 
+        background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+    }
+    
+    div[data-testid="stVerticalBlock"] > div[data-testid="stContainer"] {
+        background-color: #ffffff;
+        border: 1px solid #e2e8f0 !important;
+        border-radius: 16px !important;
+        padding: 24px !important;
+        box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.05), 0 8px 10px -6px rgba(0, 0, 0, 0.05);
+        transition: all 0.3s ease;
+    }
+    
+    .stButton > button[kind="primary"] {
+        background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%) !important;
+        color: white !important;
+        border: none !important;
+        border-radius: 12px !important;
+        font-weight: 700 !important;
+        padding: 0.75rem 1.5rem !important;
+        box-shadow: 0 4px 14px rgba(99, 102, 241, 0.4);
+        transition: all 0.2s ease;
+    }
+    .stButton > button[kind="primary"]:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 6px 20px rgba(99, 102, 241, 0.6);
+    }
+
+    .metric-wrapper {
+        background: linear-gradient(135deg, #1e1b4b 0%, #312e81 100%);
+        border: none;
+        border-radius: 16px;
+        padding: 24px;
+        text-align: center;
+        color: white;
+        box-shadow: 0 10px 20px -5px rgba(49, 46, 129, 0.3);
+    }
+    .metric-label { font-size: 0.8rem; text-transform: uppercase; color: #c7d2fe; font-weight: 700; letter-spacing: 0.05em; margin-bottom: 8px; }
+    .metric-value { font-family: 'JetBrains Mono', monospace; font-size: 2.2rem; font-weight: 800; color: #ffffff; margin: 0; }
     .metric-value.positive { color: #34d399; }
-    .status-banner { font-family: 'JetBrains Mono', monospace; padding: 14px 20px; border-radius: 6px; font-weight: 700; margin-bottom: 24px; font-size: 0.9rem; display: flex; gap: 10px; }
-    .status-active { background-color: #064e3b; color: #34d399; border: 1px solid #059669; }
-    .lifecycle-step { background-color: #0f172a; border-left: 4px solid #3b82f6; padding: 12px 16px; margin-bottom: 10px; border-radius: 4px; box-shadow: 0 1px 2px rgba(0,0,0,0.2); }
+
+    .status-banner {
+        font-family: 'JetBrains Mono', monospace;
+        padding: 16px 24px;
+        border-radius: 12px;
+        font-weight: 700;
+        margin-bottom: 24px;
+        font-size: 0.95rem;
+        display: flex;
+        gap: 12px;
+        align-items: center;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+    }
+    .status-active { background: linear-gradient(135deg, #065f46 0%, #047857 100%); color: #ecfdf5; border: none; }
+
+    h1 { color: #1e1b4b; font-weight: 800 !important; letter-spacing: -0.025em; }
+    h5 { color: #312e81; font-weight: 700 !important; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -56,14 +126,14 @@ def render_metric_card(label, value, positive=False):
     return f'<div class="metric-wrapper"><div class="metric-label">{label}</div><p class="metric-value{" positive" if positive else ""}">{value}</p></div>'
 
 # --- TOP HEADER BAR WITH NAVIGATION DROPDOWN ---
-col_title, col_nav = st.columns([2.5, 1.5], vertical_alignment="bottom")
+col_title, col_nav = st.columns([2.2, 1.8], vertical_alignment="bottom")
 with col_title:
     st.title("ReRoute")
     st.markdown("<p style='color: #64748b; font-size: 1rem; margin-top: -10px; margin-bottom: 0rem;'>Autonomous Multi-Agent Reverse Logistics Ecosystem</p>", unsafe_allow_html=True)
 with col_nav:
     app_role = st.selectbox(
         "Navigation View", 
-        ["🛒 Customer Portal", "🛠️ Artisan Partner Portal", "📈 Enterprise Mission Control"], 
+        ["🛒 Customer Portal", "🛠️ Artisan Partner Portal", "🚚 Delivery Partner Portal", "📈 Enterprise Mission Control"], 
         label_visibility="collapsed", 
         key="top_nav_role"
     )
@@ -83,13 +153,6 @@ if app_role == "🛠️ Artisan Partner Portal":
     st.divider()
     st.markdown("#### 📥 Incoming Jobs Feed & Task Queue")
     
-    if "artisan_jobs" not in st.session_state:
-        st.session_state.artisan_jobs = [
-            {"id": "JOB-9021", "item": "Alpine Trail Shell Jacket", "defect": "Stuck/Misaligned Zipper", "eta": "24h", "bounty": "₹450.00", "status": "Pending Pickup / Drop-off"},
-            {"id": "JOB-9022", "item": "Vanguard All-Terrain Boots", "defect": "Sole Separation", "eta": "48h", "bounty": "₹600.00", "status": "In Repair"},
-            {"id": "JOB-9023", "item": "Merino Wool Commuter Sweater", "defect": "Sleeve Tear", "eta": "12h", "bounty": "₹300.00", "status": "Completed & Escrow Released"}
-        ]
-
     for idx, job in enumerate(st.session_state.artisan_jobs):
         with st.container(border=True):
             cols = st.columns([2, 2, 1, 1.5])
@@ -106,7 +169,48 @@ if app_role == "🛠️ Artisan Partner Portal":
                 else:
                     st.success("✅ Payout Released")
 
-# --- VIEW 2: ENTERPRISE MISSION CONTROL ---
+    st.divider()
+    st.markdown("#### 💳 Weekly Escrow & Payout Ledger")
+    ledger_data = pd.DataFrame([
+        {"Tx ID": "TXN-8810", "Item": "Alpine Trail Jacket", "Bounty": "₹450.00", "Status": "Escrow Released", "Date": "2026-10-17"},
+        {"Tx ID": "TXN-8811", "Item": "Leather Boots Sole", "Bounty": "₹600.00", "Status": "Escrow Released", "Date": "2026-10-18"},
+        {"Tx ID": "TXN-8812", "Item": "Commuter Sweater", "Bounty": "₹300.00", "Status": "Pending Verification", "Date": "2026-10-18"}
+    ])
+    st.dataframe(ledger_data, use_container_width=True)
+
+# --- VIEW 2: DELIVERY PARTNER PORTAL ---
+elif app_role == "🚚 Delivery Partner Portal":
+    st.markdown("### 🛵 Courier & Logistics Dispatch Hub")
+    st.info("Active field assignments for local delivery partners managing Option B pickups and artisan handoffs.")
+
+    for idx, task in enumerate(st.session_state.delivery_tasks):
+        with st.container(border=True):
+            st.markdown(f"#### Task ID: `{task['id']}` — {task['item']}")
+            st.write(f"**Customer Name:** {task['customer_name']}")
+            
+            col_d1, col_d2 = st.columns(2)
+            with col_d1:
+                st.markdown(f"📍 **Pickup Location (Customer):**\n`{task['pickup_address']}`")
+            with col_d2:
+                st.markdown(f"🏁 **Handoff Location (Artisan Shop):**\n`{task['handoff_address']}`")
+            
+            st.divider()
+            st.markdown(f"**Current Status:** `{task['status']}`")
+            
+            status = task["status"]
+            if status == "Assigned - En Route to Pickup":
+                if st.button("📦 Mark as Picked Up from Customer", key=f"pick_{idx}", type="primary"):
+                    task["status"] = "Picked Up - In Transit to Artisan"
+                    st.rerun()
+            elif status == "Picked Up - In Transit to Artisan":
+                if st.button("🏁 Complete Handoff to Artisan Shop", key=f"hand_{idx}", type="primary"):
+                    task["status"] = "Delivered & Handed Over to Artisan"
+                    st.success("Delivery completed successfully!")
+                    st.rerun()
+            else:
+                st.success("✅ Delivery & Handoff Completed")
+
+# --- VIEW 3: ENTERPRISE MISSION CONTROL ---
 elif app_role == "📈 Enterprise Mission Control":
     st.markdown("### Executive Savings Overview (Last 30 Days)")
     m1, m2, m3, m4 = st.columns(4)
@@ -126,7 +230,7 @@ elif app_role == "📈 Enterprise Mission Control":
         defect_data = pd.DataFrame({"Category": ["Zippers", "Tears/Seams", "Soles", "Electronics"], "Count": [4500, 3200, 2100, 2682]}).set_index("Category")
         st.bar_chart(defect_data)
 
-# --- VIEW 3: CUSTOMER PORTAL ---
+# --- VIEW 4: CUSTOMER PORTAL ---
 else:
     is_active = st.session_state.payload is not None
 
@@ -242,6 +346,7 @@ else:
             if st.button("🔄 Start New Return", use_container_width=True):
                 st.session_state.payload = None
                 st.session_state.uploaded_bytes = None
+                st.session_state.service_booked = False
                 st.rerun()
 
         with col_right:
@@ -279,27 +384,31 @@ else:
                             
                             cust_lat, cust_lon = st.session_state.loc_lat, st.session_state.loc_lon
                             maps_url = f"https://www.google.com/maps/dir/?api=1&origin={cust_lat},{cust_lon}&destination={art_lat},{art_lon}"
-                            st.markdown(f'<p style="text-align: center; margin-top: 10px;"><a href="{maps_url}" target="_blank" style="color: #3b82f6; text-decoration: none; font-weight: 600;">📍 Open Directions in Google Maps</a></p>', unsafe_allow_html=True)
+                            st.markdown(f'<p style="text-align: center; margin-top: 10px;"><a href="{maps_url}" target="_blank" style="color: #38bdf8; text-decoration: none; font-weight: 600;">📍 Open Directions in Google Maps</a></p>', unsafe_allow_html=True)
                             
-                            if st.button("🚀 Book Service & Confirm Drop-off", type="primary", use_container_width=True, key="book_service_btn"):
-                                booking_payload = {
-                                    "customer_name": "Sai Dasaradharam G.",
-                                    "item_name": item_name,
-                                    "defect": diag.get("defect_type", "General Repair"),
-                                    "artisan_id": artisan.get("id", "artisan_01"),
-                                    "artisan_name": artisan.get("name", "Partner Shop"),
-                                    "workflow": workflow,
-                                    "status": "Booked - Pending Drop-off"
-                                }
-                                try:
-                                    res = requests.post("http://127.0.0.1:8000/api/v1/book-service", json=booking_payload, timeout=5)
-                                    if res.status_code == 200:
-                                        st.success("Service successfully booked with the local artisan!")
-                                        st.rerun()
-                                    else:
-                                        st.error("Failed to register booking with the server.")
-                                except Exception as e:
-                                    st.error(f"Connection error: {str(e)}")
+                            if not st.session_state.service_booked:
+                                if st.button("🚀 Book Service & Confirm Drop-off" if "Option A" in workflow else "🚀 Schedule Courier Pickup", type="primary", use_container_width=True, key="book_service_btn"):
+                                    booking_payload = {
+                                        "customer_name": "Sai Dasaradharam G.",
+                                        "item_name": item_name,
+                                        "defect": diag.get("defect_type", "General Repair"),
+                                        "artisan_id": artisan.get("id", "artisan_01"),
+                                        "artisan_name": artisan.get("name", "Partner Shop"),
+                                        "workflow": workflow,
+                                        "status": "Booked - Pending Drop-off" if "Option A" in workflow else "Pickup Scheduled"
+                                    }
+                                    try:
+                                        res = requests.post("http://127.0.0.1:8000/api/v1/book-service", json=booking_payload, timeout=5)
+                                        if res.status_code == 200:
+                                            st.session_state.service_booked = True
+                                            st.success("Service booked successfully!")
+                                            st.rerun()
+                                        else:
+                                            st.error("Failed to register booking with server.")
+                                    except Exception as e:
+                                        st.error(f"Connection error: {str(e)}")
+                            else:
+                                st.success("✅ Service Booked & Confirmed!")
                         except Exception as map_err:
                             st.error(f"Map rendering temporarily unavailable: {map_err}")
                     else:
@@ -307,40 +416,45 @@ else:
 
                 st.markdown("<div style='margin-bottom: 20px;'></div>", unsafe_allow_html=True)
 
-                if "Option A" in workflow:
-                    with st.container(border=True):
-                        st.markdown("#### 🧾 Counter Reimbursement & Fraud Guard")
-                        st.info("Take your item to the shop above, get it fixed, and upload your digital repair receipt to claim your instant refund while keeping your item.")
-                        
-                        receipt_file = st.file_uploader("Upload Repair Receipt", type=["jpg", "jpeg", "png"], key="unique_receipt_upload")
-                        if receipt_file: st.image(receipt_file, caption="Receipt Uploaded", width=250)
-                        
-                        if receipt_file:
-                            if st.button("🛡️ Verify Receipt & Claim Refund", type="primary", use_container_width=True, key="unique_verify_btn"):
-                                with st.spinner("Executing Vertex AI Fraud Guard..."):
-                                    receipt_file.seek(0)
-                                    r_files = {"file": (receipt_file.name, receipt_file.getvalue(), receipt_file.type)}
-                                    r_data = {"estimated_cost": str(diag.get("estimated_repair_cost_inr", 0))}
-                                    r_res = requests.post("http://127.0.0.1:8000/api/v1/verify-receipt", data=r_data, files=r_files)
-                                    if r_res.status_code == 200:
-                                        st.session_state.receipt_verified = r_res.json()
-                                    else:
-                                        st.error("Failed to verify receipt.")
-                                        
-                        if st.session_state.receipt_verified:
-                            v_data = st.session_state.receipt_verified
-                            if v_data.get("status") == "VERIFIED":
-                                st.success(f"**✅ RECEIPT VERIFIED:** ₹{v_data.get('extracted_amount_inr', '0')} approved. Instant refund dispatched to bank account.")
-                            else:
-                                st.error(f"**⚠️ FLAG RAISED:** {v_data.get('reason', 'Amount mismatch or invalid image.')}. Manual review triggered.")
+                # --- CONDITIONAL DISPLAY BASED ON OPTION A VS OPTION B AFTER BOOKING ---
+                if st.session_state.service_booked:
+                    if "Option A" in workflow:
+                        with st.container(border=True):
+                            st.markdown("#### 🧾 Counter Reimbursement & Fraud Guard")
+                            st.info("Take your item to the shop above, get it fixed, and upload your digital repair receipt to claim your instant refund while keeping your item.")
+                            
+                            receipt_file = st.file_uploader("Upload Repair Receipt", type=["jpg", "jpeg", "png"], key="unique_receipt_upload")
+                            if receipt_file: st.image(receipt_file, caption="Receipt Uploaded", width=250)
+                            
+                            if receipt_file:
+                                if st.button("🛡️ Verify Receipt & Claim Refund", type="primary", use_container_width=True, key="unique_verify_btn"):
+                                    with st.spinner("Executing Vertex AI Fraud Guard..."):
+                                        receipt_file.seek(0)
+                                        r_files = {"file": (receipt_file.name, receipt_file.getvalue(), receipt_file.type)}
+                                        r_data = {"estimated_cost": str(diag.get("estimated_repair_cost_inr", 0))}
+                                        r_res = requests.post("http://127.0.0.1:8000/api/v1/verify-receipt", data=r_data, files=r_files)
+                                        if r_res.status_code == 200:
+                                            st.session_state.receipt_verified = r_res.json()
+                                        else:
+                                            st.error("Failed to verify receipt.")
+                                            
+                            if st.session_state.receipt_verified:
+                                v_data = st.session_state.receipt_verified
+                                if v_data.get("status") == "VERIFIED":
+                                    st.success(f"**✅ RECEIPT VERIFIED:** ₹{v_data.get('extracted_amount_inr', '0')} approved. Instant refund dispatched to bank account.")
+                                else:
+                                    st.error(f"**⚠️ FLAG RAISED:** {v_data.get('reason', 'Amount mismatch or invalid image.')}. Manual review triggered.")
+                    else:
+                        with st.container(border=True):
+                            st.markdown("#### 🚚 Pickup Scheduled & Managed Logistics")
+                            st.success("✅ **Pickup is scheduled!** A local courier partner has been assigned to collect your item.")
+                            st.markdown("""
+                            * **Status:** Dispatching rider to your pinned location.
+                            * **Next Steps:** Keep your item ready. The rider will deliver it directly to the matched artisan workshop for local restoration.
+                            """)
                 else:
                     with st.container(border=True):
-                        st.markdown("#### 🛒 Managed Logistics & Recommerce Listing")
-                        st.success("🚚 **Courier Dispatched:** Local gig-partner assigned for doorstep pickup.")
-                        shop_name = artisan.get('name', 'Partner Shop')
-                        st.markdown(f"""
-                        * **Step 1:** Courier collects item from your address and drops it at **{shop_name}**.
-                        * **Step 2:** Artisan completes the repair and triggers escrow payout.
-                        * **Step 3:** Restored item is routed directly to the **nearest micro-warehouse** (bypassing national mega-hubs).
-                        * **Step 4:** Immediately listed on the platform's **"Open-Box" Marketplace** for local next-day delivery.
-                        """)
+                        if "Option A" in workflow:
+                            st.info("📌 **Next Step:** Click 'Book Service & Confirm Drop-off' above to unlock receipt upload.")
+                        else:
+                            st.info("📌 **Next Step:** Click 'Schedule Courier Pickup' above to confirm your pickup request.")
