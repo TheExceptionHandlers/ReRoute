@@ -4,7 +4,6 @@ import folium
 from streamlit_folium import st_folium
 from PIL import Image
 import io
-import re
 import pandas as pd
 import numpy as np
 from streamlit_geolocation import streamlit_geolocation
@@ -14,25 +13,18 @@ if "payload" not in st.session_state: st.session_state.payload = None
 if "loc_lat" not in st.session_state: st.session_state.loc_lat = 12.9352
 if "loc_lon" not in st.session_state: st.session_state.loc_lon = 77.6245
 if "loc_address" not in st.session_state: st.session_state.loc_address = "Koramangala 4th Block, Bengaluru, India"
-if "location_locked" not in st.session_state: st.session_state.location_locked = True
+if "location_confirmed" not in st.session_state: st.session_state.location_confirmed = True
 if "uploaded_bytes" not in st.session_state: st.session_state.uploaded_bytes = None
 if "uploaded_name" not in st.session_state: st.session_state.uploaded_name = None
 if "uploaded_type" not in st.session_state: st.session_state.uploaded_type = None
 if "receipt_verified" not in st.session_state: st.session_state.receipt_verified = None
 if "last_clicked_lat" not in st.session_state: st.session_state.last_clicked_lat = None
 if "last_clicked_lon" not in st.session_state: st.session_state.last_clicked_lon = None
-if "loc_search_bar" not in st.session_state: st.session_state.loc_search_bar = "Koramangala 4th Block, Bengaluru, India"
 if "selected_workflow" not in st.session_state: st.session_state.selected_workflow = "Option A: Self Drop-off (Get Instant Refund)"
+if "selected_product" not in st.session_state: st.session_state.selected_product = "Alpine Trail Shell Jacket"
+if "retail_price" not in st.session_state: st.session_state.retail_price = 8500.00
 
-# Mock Artisan Job Queue state for the demo
-if "artisan_jobs" not in st.session_state:
-    st.session_state.artisan_jobs = [
-        {"id": "JOB-9021", "item": "Alpine Trail Shell Jacket", "defect": "Stuck/Misaligned Zipper", "eta": "24h", "bounty": "₹450.00", "status": "Pending Pickup / Drop-off"},
-        {"id": "JOB-9022", "item": "Vanguard All-Terrain Boots", "defect": "Sole Separation", "eta": "48h", "bounty": "₹600.00", "status": "In Repair"},
-        {"id": "JOB-9023", "item": "Merino Wool Commuter Sweater", "defect": "Sleeve Tear", "eta": "12h", "bounty": "₹300.00", "status": "Completed & Escrow Released"}
-    ]
-
-# --- GEOCODING HELPERS WITH MULTI-TIER FALLBACK ---
+# --- GEOCODING HELPER ---
 def reverse_geocode(lat, lon):
     try:
         url = f"https://nominatim.openstreetmap.org/reverse?format=json&lat={lat}&lon={lon}&zoom=18&addressdetails=1"
@@ -40,41 +32,6 @@ def reverse_geocode(lat, lon):
         if res.status_code == 200: return res.json().get('display_name', 'Address not found')
     except Exception: pass
     return f"Lat: {lat:.5f}, Lon: {lon:.5f}"
-
-def forward_geocode(address):
-    url = "https://nominatim.openstreetmap.org/search"
-    
-    # Tier 1: Try exact address string
-    try:
-        params = {'q': address, 'format': 'json', 'limit': 1}
-        res = requests.get(url, params=params, headers={'User-Agent': 'ReRoute/1.0'}, timeout=4)
-        if res.status_code == 200 and len(res.json()) > 0:
-            return float(res.json()[0]['lat']), float(res.json()[0]['lon'])
-    except Exception: pass
-
-    # Tier 2: Strip house numbers and postal codes if exact search fails
-    try:
-        cleaned = re.sub(r'\b\d{5,6}\b', '', address)
-        cleaned = re.sub(r'^\d+[\s,-]*', '', cleaned).strip()
-        if cleaned and cleaned != address:
-            params = {'q': cleaned, 'format': 'json', 'limit': 1}
-            res = requests.get(url, params=params, headers={'User-Agent': 'ReRoute/1.0'}, timeout=4)
-            if res.status_code == 200 and len(res.json()) > 0:
-                return float(res.json()[0]['lat']), float(res.json()[0]['lon'])
-    except Exception: pass
-
-    # Tier 3: Fallback to neighborhood/city components (last 3 parts)
-    try:
-        parts = [p.strip() for p in address.split(',')]
-        if len(parts) > 1:
-            fallback_query = ", ".join(parts[-3:])
-            params = {'q': fallback_query, 'format': 'json', 'limit': 1}
-            res = requests.get(url, params=params, headers={'User-Agent': 'ReRoute/1.0'}, timeout=4)
-            if res.status_code == 200 and len(res.json()) > 0:
-                return float(res.json()[0]['lat']), float(res.json()[0]['lon'])
-    except Exception: pass
-
-    return None, None
 
 # --- PAGE UI & STYLING ---
 st.set_page_config(page_title="ReRoute | Smart Returns", layout="wide", initial_sidebar_state="collapsed")
@@ -126,6 +83,13 @@ if app_role == "🛠️ Artisan Partner Portal":
     st.divider()
     st.markdown("#### 📥 Incoming Jobs Feed & Task Queue")
     
+    if "artisan_jobs" not in st.session_state:
+        st.session_state.artisan_jobs = [
+            {"id": "JOB-9021", "item": "Alpine Trail Shell Jacket", "defect": "Stuck/Misaligned Zipper", "eta": "24h", "bounty": "₹450.00", "status": "Pending Pickup / Drop-off"},
+            {"id": "JOB-9022", "item": "Vanguard All-Terrain Boots", "defect": "Sole Separation", "eta": "48h", "bounty": "₹600.00", "status": "In Repair"},
+            {"id": "JOB-9023", "item": "Merino Wool Commuter Sweater", "defect": "Sleeve Tear", "eta": "12h", "bounty": "₹300.00", "status": "Completed & Escrow Released"}
+        ]
+
     for idx, job in enumerate(st.session_state.artisan_jobs):
         with st.container(border=True):
             cols = st.columns([2, 2, 1, 1.5])
@@ -141,15 +105,6 @@ if app_role == "🛠️ Artisan Partner Portal":
                         st.rerun()
                 else:
                     st.success("✅ Payout Released")
-
-    st.divider()
-    st.markdown("#### 💳 Weekly Escrow & Payout Ledger")
-    ledger_data = pd.DataFrame([
-        {"Tx ID": "TXN-8810", "Item": "Alpine Trail Jacket", "Bounty": "₹450.00", "Status": "Escrow Released", "Date": "2026-10-17"},
-        {"Tx ID": "TXN-8811", "Item": "Leather Boots Sole", "Bounty": "₹600.00", "Status": "Escrow Released", "Date": "2026-10-18"},
-        {"Tx ID": "TXN-8812", "Item": "Commuter Sweater", "Bounty": "₹300.00", "Status": "Pending Verification", "Date": "2026-10-18"}
-    ])
-    st.dataframe(ledger_data, use_container_width=True)
 
 # --- VIEW 2: ENTERPRISE MISSION CONTROL ---
 elif app_role == "📈 Enterprise Mission Control":
@@ -198,46 +153,41 @@ else:
                 )
                 st.session_state.selected_workflow = selected_workflow
                 st.divider()
-                st.markdown("##### 📍 Verify Your Location")
-                st.caption("Search any address (e.g., Choolai Chennai, Koramangala) or click the map.")
+                st.markdown("##### 📍 Pin Your Location on Map")
+                st.caption("Click anywhere on the map to select your pickup/drop-off point, or click 'Detect Current Location'.")
                 
-                col_s1, col_s2 = st.columns([3, 1], vertical_alignment="bottom")
-                with col_s1:
-                    search_input = st.text_input("Search Address:", key="loc_search_bar")
-                with col_s2:
-                    search_clicked = st.button("🔍 Set", use_container_width=True, key="search_btn")
-
-                if search_clicked and search_input:
-                    lat, lon = forward_geocode(search_input)
-                    if lat and lon:
-                        st.session_state.loc_lat = lat
-                        st.session_state.loc_lon = lon
-                        st.session_state.loc_address = search_input
-                        st.success(f"Locked: {search_input}")
+                gps_trigger = streamlit_geolocation()
+                if gps_trigger and gps_trigger.get('latitude'):
+                    g_lat = float(gps_trigger['latitude'])
+                    g_lon = float(gps_trigger['longitude'])
+                    if g_lat != st.session_state.loc_lat:
+                        st.session_state.loc_lat = g_lat
+                        st.session_state.loc_lon = g_lon
+                        st.session_state.loc_address = reverse_geocode(g_lat, g_lon)
+                        st.session_state.location_confirmed = True
                         st.rerun()
-                    else:
-                        st.error("Address resolution failed. Try entering the area/city name or click the map.")
 
                 try:
                     m_map = folium.Map(location=[st.session_state.loc_lat, st.session_state.loc_lon], zoom_start=15, tiles="https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}", attr="Google Maps")
                     folium.Marker([st.session_state.loc_lat, st.session_state.loc_lon], popup="Selected Location", icon=folium.Icon(color="red", icon="user")).add_to(m_map)
                     
-                    m_data = st_folium(m_map, height=250, use_container_width=True, key="primary_map", returned_objects=["last_clicked"])
+                    m_data = st_folium(m_map, height=280, use_container_width=True, key="primary_map", returned_objects=["last_clicked"])
                     
                     if m_data and m_data.get("last_clicked"):
                         c_lat = m_data["last_clicked"]["lat"]
                         c_lon = m_data["last_clicked"]["lng"]
-                        if round(c_lat, 4) != round(st.session_state.loc_lat, 4):
+                        if c_lat != st.session_state.last_clicked_lat or c_lon != st.session_state.last_clicked_lon:
+                            st.session_state.last_clicked_lat = c_lat
+                            st.session_state.last_clicked_lon = c_lon
                             st.session_state.loc_lat = c_lat
                             st.session_state.loc_lon = c_lon
-                            new_addr = reverse_geocode(c_lat, c_lon)
-                            st.session_state.loc_address = new_addr
-                            st.session_state.loc_search_bar = new_addr
+                            st.session_state.loc_address = reverse_geocode(c_lat, c_lon)
+                            st.session_state.location_confirmed = True
                             st.rerun()
                 except Exception:
                     st.caption("Map preview unavailable.")
 
-                st.success(f"✅ Active Location: {st.session_state.loc_address}")
+                st.success(f"✅ Location Selected: {st.session_state.loc_address}")
 
             st.markdown("<div style='margin-bottom: 15px;'></div>", unsafe_allow_html=True)
 
@@ -260,6 +210,8 @@ else:
             process_btn = st.button("⚡ Analyze Return & Find Local Repair", use_container_width=True, type="primary", disabled=not can_process, key="analyze_btn")
 
             if process_btn and st.session_state.uploaded_bytes:
+                st.session_state.selected_product = selected_product
+                st.session_state.retail_price = retail_price
                 st.session_state.payload = None 
                 st.session_state.receipt_verified = None
                 backend_url = "http://127.0.0.1:8000/api/v1/intercept"
@@ -297,12 +249,12 @@ else:
             diag = payload.get("diagnosis", {})
             is_repairable = diag.get("is_repairable", True)
             workflow = st.session_state.selected_workflow
+            item_name = st.session_state.get("selected_product", "Alpine Trail Shell Jacket")
 
             if not is_repairable:
                 st.markdown('<div class="status-banner" style="background-color: #450a0a; color: #fca5a5; border: 1px solid #b91c1c;">● SYSTEM STATUS: TOTAL LOSS - ROUTED TO SALVAGE</div>', unsafe_allow_html=True)
                 st.error(f"**AI Diagnosis (Unrepairable):** {diag.get('defect_summary', 'Item is damaged beyond functional restoration limits.')}")
             else:
-                # --- DISTINCT VISUAL THEME BASED ON WORKFLOW ---
                 if "Option A" in workflow:
                     st.markdown('<div class="status-banner" style="background-color: #0f2830; color: #38bdf8; border: 1px solid #0284c7;">⚡ WORKFLOW ACTIVE: SELF DROP-OFF & INSTANT REIMBURSEMENT</div>', unsafe_allow_html=True)
                 else:
@@ -312,7 +264,6 @@ else:
                 arb = raw_arb.get("match_artisan_and_arbitrage_response", raw_arb)
                 artisan = arb.get("artisan_matched", {})
                 
-                # --- MAP & PARTNER DETAILS ---
                 with st.container(border=True):
                     st.markdown("##### 🗺️ Local Repair Partner Details")
                     if artisan and artisan.get("latitude") and artisan.get("longitude"):
@@ -328,7 +279,27 @@ else:
                             
                             cust_lat, cust_lon = st.session_state.loc_lat, st.session_state.loc_lon
                             maps_url = f"https://www.google.com/maps/dir/?api=1&origin={cust_lat},{cust_lon}&destination={art_lat},{art_lon}"
-                            st.markdown(f'<p style="text-align: center; margin-top: 10px;"><a href="{maps_url}" target="_blank" style="color: #38bdf8; text-decoration: none; font-weight: 600;">📍 Open Directions in Google Maps</a></p>', unsafe_allow_html=True)
+                            st.markdown(f'<p style="text-align: center; margin-top: 10px;"><a href="{maps_url}" target="_blank" style="color: #3b82f6; text-decoration: none; font-weight: 600;">📍 Open Directions in Google Maps</a></p>', unsafe_allow_html=True)
+                            
+                            if st.button("🚀 Book Service & Confirm Drop-off", type="primary", use_container_width=True, key="book_service_btn"):
+                                booking_payload = {
+                                    "customer_name": "Sai Dasaradharam G.",
+                                    "item_name": item_name,
+                                    "defect": diag.get("defect_type", "General Repair"),
+                                    "artisan_id": artisan.get("id", "artisan_01"),
+                                    "artisan_name": artisan.get("name", "Partner Shop"),
+                                    "workflow": workflow,
+                                    "status": "Booked - Pending Drop-off"
+                                }
+                                try:
+                                    res = requests.post("http://127.0.0.1:8000/api/v1/book-service", json=booking_payload, timeout=5)
+                                    if res.status_code == 200:
+                                        st.success("Service successfully booked with the local artisan!")
+                                        st.rerun()
+                                    else:
+                                        st.error("Failed to register booking with the server.")
+                                except Exception as e:
+                                    st.error(f"Connection error: {str(e)}")
                         except Exception as map_err:
                             st.error(f"Map rendering temporarily unavailable: {map_err}")
                     else:
@@ -336,7 +307,6 @@ else:
 
                 st.markdown("<div style='margin-bottom: 20px;'></div>", unsafe_allow_html=True)
 
-                # --- DISTINCT BOTTOM SECTIONS BASED ON OPTION A VS OPTION B ---
                 if "Option A" in workflow:
                     with st.container(border=True):
                         st.markdown("#### 🧾 Counter Reimbursement & Fraud Guard")
